@@ -1,0 +1,32 @@
+name: Pappers Prospector — Daily Import
+
+on:
+  schedule:
+    # Tous les jours à 7h00 Paris (6h UTC en heure d'été, 5h UTC en heure d'hiver)
+    # Ajuste le cron si besoin : https://crontab.guru/
+    - cron: "0 6 * * *"
+  workflow_dispatch:   # Permet aussi un lancement manuel depuis GitHub
+
+jobs:
+  run-prospector:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Installer les dépendances
+        run: pip install requests
+
+      - name: Lancer le Pappers Prospector
+        env:
+          PAPPERS_API_KEY:  ${{ secrets.PAPPERS_API_KEY }}
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          SLACK_BOT_TOKEN:  ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID:    ${{ secrets.SLACK_USER_ID }}
+        run: python pappers_prospector.py
