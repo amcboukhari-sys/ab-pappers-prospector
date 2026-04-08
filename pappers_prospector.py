@@ -293,6 +293,34 @@ def notify_slack(stats, inserted):
     except Exception as e:
         print(f"  ⚠️  Slack exception: {e}")
 
+def send_csv_to_slack(filepath):
+    """Envoie le CSV en fichier attaché sur Slack."""
+    if not SLACK_BOT_TOKEN:
+        print("  ℹ️  Pas de SLACK_BOT_TOKEN — envoi CSV Slack ignoré")
+        return
+    try:
+        filename = os.path.basename(filepath)
+        with open(filepath, "rb") as f:
+            r = requests.post(
+                "https://slack.com/api/files.upload",
+                headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                data={
+                    "channels": SLACK_USER_ID,
+                    "title": filename,
+                    "initial_comment": f"📎 Backup CSV du {date.today().isoformat()} — {filename}",
+                    "filename": filename,
+                },
+                files={"file": (filename, f, "text/csv")},
+                timeout=30
+            )
+        data = r.json()
+        if data.get("ok"):
+            print(f"  ✅ CSV envoyé sur Slack : {filename}")
+        else:
+            print(f"  ⚠️  Slack upload error: {data.get('error')}")
+    except Exception as e:
+        print(f"  ⚠️  Slack upload exception: {e}")
+
 # ================================================================
 # 📁  CSV BACKUP + GOOGLE DRIVE UPLOAD
 # ================================================================
@@ -438,9 +466,10 @@ def main():
     print(f"     🔴 Critique       : {stats['critique']:,}")
     print(f"     🟠 Élevé          : {stats['eleve']:,}")
 
-    # ── Backup CSV + Google Drive ─────────────────────────────
+    # ── Backup CSV → Slack + Google Drive ────────────────────
     if to_insert:
         csv_path = save_csv(to_insert)
+        send_csv_to_slack(csv_path)
         upload_to_gdrive(csv_path)
 
     # ── Import Airtable ────────────────────────────────────────
