@@ -19,14 +19,23 @@ jobs:
           python-version: "3.11"
 
       - name: Installer les dépendances
-        run: pip install requests google-api-python-client google-auth
+        run: pip install requests
 
       - name: Lancer le Pappers Prospector
         env:
-          PAPPERS_API_KEY:    ${{ secrets.PAPPERS_API_KEY }}
-          AIRTABLE_API_KEY:   ${{ secrets.AIRTABLE_API_KEY }}
-          SLACK_BOT_TOKEN:    ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_USER_ID:      ${{ secrets.SLACK_USER_ID }}
-          GDRIVE_FOLDER_ID:   ${{ secrets.GDRIVE_FOLDER_ID }}
-          GDRIVE_SA_JSON_B64: ${{ secrets.GDRIVE_SA_JSON_B64 }}
-        run: python pappers_prospector.py
+          PAPPERS_API_KEY:  ${{ secrets.PAPPERS_API_KEY }}
+          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
+          SLACK_BOT_TOKEN:  ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID:    ${{ secrets.SLACK_USER_ID }}
+        run: |
+          python pappers_prospector.py
+          mkdir -p csv_backup
+          cp /tmp/pappers_prospects_*.csv csv_backup/ 2>/dev/null || true
+
+      - name: Sauvegarder CSV backup
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pappers-csv-${{ github.run_number }}
+          path: csv_backup/
+          retention-days: 90
