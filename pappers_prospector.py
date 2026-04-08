@@ -9,6 +9,10 @@ import requests
 import time
 import os
 import sys
+import csv
+import json
+import base64
+import tempfile
 from datetime import date
 from urllib.parse import quote
 
@@ -19,6 +23,9 @@ PAPPERS_API_KEY  = os.getenv("PAPPERS_API_KEY",  "")
 AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY", "")
 SLACK_BOT_TOKEN  = os.getenv("SLACK_BOT_TOKEN",  "")   # xoxb-... — requis pour notif Slack
 SLACK_USER_ID    = os.getenv("SLACK_USER_ID",    "U0AQA9JMFNZ")
+
+GDRIVE_FOLDER_ID = os.getenv("GDRIVE_FOLDER_ID", "")       # ID du dossier Google Drive
+GDRIVE_SA_JSON   = os.getenv("GDRIVE_SA_JSON_B64", "")     # Service Account JSON (base64)
 
 AIRTABLE_BASE_ID = "appWSQ2iH7b5CNRgy"
 AIRTABLE_TABLE   = "tblDeBkovrsOA68FR"
@@ -287,6 +294,69 @@ def notify_slack(stats, inserted):
         print(f"  ⚠️  Slack exception: {e}")
 
 # ================================================================
+# 📁  CSV BACKUP + GOOGLE DRIVE UPLOAD
+# ================================================================
+CSV_COLUMNS = [
+    "Entreprise","SIREN","SIRET Siège","Forme Juridique","Code NAF",
+    "Secteur d'activité","Effectif (tranche)","Chiffre d'affaires (€)",
+    "Ville","Code Postal","Adresse","Date Création",
+    "Sapin II (Art.17)","Devoir de Vigilance - Actuel",
+    "Devoir de Vigilance - CSDDD 2027+","Alerte Éthique (≥50 sal.)",
+    "LBC-FT","Lois Applicables","Niveau d'exposition",
+    "URL Pappers","Statut Prospection","Date Import"
+]
+
+def save_csv(records):
+    """Sauvegarde les records dans un CSV local et retourne le chemin."""
+    filename = f"pappers_prospects_{date.today().isoformat()}.csv"
+    filepath = os.path.join(tempfile.gettempdir(), filename)
+    with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_COLUMNS, delimiter=";",
+                           extrasaction="ignore")
+        w.writeheader()
+        for rec in records:
+            row = dict(rec)
+            # Convertir les listes en texte
+            if isinstance(row.get("Lois Applicables"), list):
+                row["Lois Applicables"] = ", ".join(row["Lois Applicables"])
+            # Convertir les booléens en Oui/Non
+            for k in ["Sapin II (Art.17)","Devoir de Vigilance - Actuel",
+                       "Devoir de Vigilance - CSDDD 2027+",
+                       "Alerte Éthique (≥50 sal.)","LBC-FT"]:
+                if k in row:
+                    row[k] = "Oui" if row[k] else "Non"
+            w.writerow(row)
+    print(f"\n  💾 CSV sauvegardé : {filepath} ({len(records)} lignes)")
+    return filepath
+
+def upload_to_gdrive(filepath):
+    """Upload le CSV vers Google Drive via Service Account."""
+    if not GDRIVE_SA_JSON or not GDRIVE_FOLDER_ID:
+        print("  ℹ️  Pas de config Google Drive — upload ignoré")
+        return
+    try:
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaFileUpload
+        from google.oauth2.service_account import Credentials
+    except ImportError:
+        print("  ⚠️  google-api-python-client non installé — upload ignoré")
+        return
+
+    try:
+        sa_json = json.loads(base64.b64decode(GDRIVE_SA_JSON))
+        creds = Credentials.from_service_account_info(
+            sa_json, scopes=["https://www.googleapis.com/auth/drive.file"])
+        service = build("drive", "v3", credentials=creds)
+
+        filename = os.path.basename(filepath)
+        meta = {"name": filename, "parents": [GDRIVE_FOLDER_ID]}
+        media = MediaFileUpload(filepath, mimetype="text/csv")
+        f = service.files().create(body=meta, media_body=media, fields="id,webViewLink").execute()
+        print(f"  ☁️  Upload Google Drive OK : {f.get('webViewLink','')}")
+    except Exception as e:
+        print(f"  ⚠️  Erreur Google Drive : {e}")
+
+# ================================================================
 # 🚀  MAIN
 # ================================================================
 def main():
@@ -367,6 +437,11 @@ def main():
     print(f"     LBC-FT            : {stats['lbcft']:,}")
     print(f"     🔴 Critique       : {stats['critique']:,}")
     print(f"     🟠 Élevé          : {stats['eleve']:,}")
+
+    # ── Backup CSV + Google Drive ─────────────────────────────
+    if to_insert:
+        csv_path = save_csv(to_insert)
+        upload_to_gdrive(csv_path)
 
     # ── Import Airtable ────────────────────────────────────────
     print(f"\n📤  Import de {len(to_insert):,} records dans Airtable...")

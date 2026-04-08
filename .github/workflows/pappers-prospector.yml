@@ -2,10 +2,8 @@ name: Pappers Prospector — Daily Import
 
 on:
   schedule:
-    # Tous les jours à 7h00 Paris (6h UTC en heure d'été, 5h UTC en heure d'hiver)
-    # Ajuste le cron si besoin : https://crontab.guru/
     - cron: "0 6 * * *"
-  workflow_dispatch:   # Permet aussi un lancement manuel depuis GitHub
+  workflow_dispatch:
 
 jobs:
   run-prospector:
@@ -21,12 +19,14 @@ jobs:
           python-version: "3.11"
 
       - name: Installer les dépendances
-        run: pip install requests
+        run: pip install requests google-api-python-client google-auth
 
       - name: Lancer le Pappers Prospector
         env:
-          PAPPERS_API_KEY:  ${{ secrets.PAPPERS_API_KEY }}
-          AIRTABLE_API_KEY: ${{ secrets.AIRTABLE_API_KEY }}
-          SLACK_BOT_TOKEN:  ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_USER_ID:    ${{ secrets.SLACK_USER_ID }}
+          PAPPERS_API_KEY:    ${{ secrets.PAPPERS_API_KEY }}
+          AIRTABLE_API_KEY:   ${{ secrets.AIRTABLE_API_KEY }}
+          SLACK_BOT_TOKEN:    ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_USER_ID:      ${{ secrets.SLACK_USER_ID }}
+          GDRIVE_FOLDER_ID:   ${{ secrets.GDRIVE_FOLDER_ID }}
+          GDRIVE_SA_JSON_B64: ${{ secrets.GDRIVE_SA_JSON_B64 }}
         run: python pappers_prospector.py
